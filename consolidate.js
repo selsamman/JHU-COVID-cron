@@ -1,0 +1,330 @@
+const fs = require('fs').promises;
+const {gzip, ungzip} = require('node-gzip');
+const ccs = require('./cc.js')
+
+module.exports = async function processData (csv, population) {
+    processCSV(csv);
+    const cc = getCountryCodes();
+    population = population || getPopulation(csv.usPop, csv.globPop);
+    addSumsUS(csv);
+    let [cases, dr1] = getUSCases(csv.usCases, undefined, "cases", population, true, cc);
+    let [c2, dr2] = getUSCases(csv.usDeaths, cases, "deaths", population, false, cc)
+    addSumsGlob(csv);
+    let [c3, dr3] = getGlobCases(csv.globCases, cases, "cases", population, cc);
+    let [c4, dr4] = getGlobCases(csv.globDeaths, cases, "deaths", population, cc);
+
+    if (dr1.toString() !== dr2.toString() || dr1.toString() !== dr3.toString() || dr1.toString() !== dr4.toString()) {
+        console.log(dr1);
+        console.log(dr2);
+        console.log(dr3);
+        console.log(dr4);
+        throw ("inconsistent data ranges");
+    }
+    return [cases, population, dr1];
+}
+
+function processCSV(csv) {
+    console.log("File Lengths");
+    Object.getOwnPropertyNames(csv).map( f => {
+
+        csv[f] = csv[f].split("\n").map(line =>
+            line.replace(/;/g,'')
+                .replace(/\"(.*)\"/g,(s)=>
+                    s.replace(/,/g, '~'))
+                .replace(/,/g,";")
+                .replace(/~/g, ',')
+                .split(";")
+        );
+    });
+    return csv;
+}
+function getUSCases(file, location, prop, populationData, isCases) {
+    const props=getProps(file[0]);
+    const dates = Object.getOwnPropertyNames(props).filter((p)=>p.match(/\d*\/\d*\/\d*/));
+    location = location || {};
+    file.slice(1).map( line => {
+        if (line[props.Combined_Key]) {
+            const county = line[props['Admin2']];
+            const state = line[props['Province_State']]
+            const key = county ? county + ", " + state : state;
+            const dataProp = isCases ? 11 : 12;
+            location [key] = {
+                name: key,
+                code: 'US',
+                type: key.match(/,/) ? "county" : "state",
+                longitude: line[props.Long_],
+                latitude: line[props.Lat],
+                population: location[key] ? location [key].population : 0,
+                cases: location[key] ? location [key].cases : [],
+                deaths: location[key] ? location [key].deaths : [],
+            }
+            location [key][prop] = line.slice(dataProp, line.length)
+            if (!isCases)
+                location[key]['population'] = line[dataProp - 1];
+        }
+    });
+    return [location, dates];
+}
+const countryCorrections = {
+    "Cote d'Ivoire": "Côte d'Ivoire",
+    "\"Korea": "South Korea",
+    "Korea": "South Korea",
+    "US": "United States",
+    "Taiwan*": "Taiwan",
+    "Brunei" : "Brunei Darussalam",
+    "Vietnam" : "Viet Nam",
+    "Korea South": "South Korea"
+}
+const populationCorrections = {
+    "Taiwan Province of China" : "Taiwan",
+    "United States of America" : "United States",
+    "United States Virgin Islands" : "Virgin Islands",
+    "Bolivia (Plurinational State of)" : "Bolivia",
+    "Iran (Islamic Republic of)" : "Iran",
+    "Republic of Korea" : "South Korea",
+    "Republic of Moldova": "Moldova",
+    "Russian Federation" : "Russia",
+    "United Republic of Tanzania": "Tanzania",
+    "Venezuela (Bolivarian Republic of)": "Venezuela",
+    "Syrian Arab Republic": "Syria",
+    "Lao People's Democratic Republic": "Laos",
+
+
+}
+function getCountryCodes() {
+    const cc = {};
+    ccs.cc.map( c => cc[correct(c.name)] = c['alpha-2']);
+    return cc;
+    function correct(c) {
+        return populationCorrections[c] || c;
+    }
+}
+function getGlobCases(file, location, prop, populationData, cc) {
+    const props=getProps(file[0])
+    const dates = Object.getOwnPropertyNames(props).filter((p)=>p.match(/\d*\/\d*\/\d*/));
+    location = location || {};
+    file.slice(1).map( line => {
+        let key = countryCorrections[line[props['Country/Region']]] || line[props['Country/Region']];
+        let population = populationData[key];
+        const province = line[props['Province/State']];
+        let type = "country";
+        let countryCode = cc[key];
+
+        if (province)
+            if (populationData[province]) {
+                population = populationData[province];
+
+
+                if (key === "United Kingdom") {
+                    key = province;
+                    type = "country";
+                } else {
+                    key = province.match(key) ? province : province + ", " + key;
+                    type = "province";
+                }
+            } else
+                if (!key.match(/China/))
+                    console.log("No population data for " + province + " " + key);
+
+        if (key) {
+            if (!population ) {
+                    console.log("No population data for " + key);
+            } else {
+                if (!countryCode)
+                    console.log("Missing country code for " + key);
+                location [key] = {
+                    name: key,
+                    code: countryCode || "N/A",
+                    longitude: line[props.Long],
+                    latitude: line[props.Lat],
+                    type: type,
+                    population: population,
+                    cases: location[key] ? location [key].cases : [],
+                    deaths: location[key] ? location [key].deaths : [],
+                }
+                location [key][prop] = line.slice(4, line.length)
+            }
+        }
+    });
+    return [location, dates];
+}
+function getPopulation(us, glob) {
+    const usProps = {county: 0, state: 1, population: 13}
+    const globProps = getProps(glob[0]);
+    console.log("US Columns");
+    Object.getOwnPropertyNames(usProps).map( p => console.log(`${p}: ${usProps[p]}`));
+    console.log("Global Columns");
+    Object.getOwnPropertyNames(globProps).map( p => console.log(`${p}: ${globProps[p]}`));
+
+    let population = {
+        "Total": 7777439049,
+        "Congo (Brazzaville)": 1800000,
+        "Congo (Kinshasa)": 11860000,
+        "Taiwan": 23780000,
+        "West Bank and Gaza": 4685000,
+        "Kosovo": 1831000,
+        "Burma": 53370000,
+        "Ontario": 14446515,
+        "Quebec": 8433301,
+        "British Columbia": 5020302,
+        "Alberta": 4345737,
+        "Manitoba": 1360396,
+        "Saskatchewan": 1168423,
+        "Nova Scotia": 965382,
+        "New Brunswick": 772094,
+        "Newfoundland and Labrador": 523790,
+        "Prince Edward Island": 154748,
+        "Northwest Territories": 44598,
+        "Yukon": 40369,
+        "Nunavut": 38787,
+        "South Australia": 1659800,
+        "Western Australia": 2366900,
+        "Queensland": 4599400,
+        "Victoria": 5640900,
+        "New South Wales": 7317500,
+        "Australian Capital Territory": 428060,
+        "Northern Territory": 428060,
+        "Tasmania": 515000,
+
+    };
+    let states = {}
+    /*
+    us.slice(5, us.length-6).map(l => {
+if (l[usProps.county].match(/Queens/))
+    console.log("Queens " + l);
+        population[fixUSState(l[usProps.state])] = (population[fixUSState(l[usProps.state])] || 0) + l[usProps.population] * 1;
+        return (population[ fixUSNames(l[usProps.county], l[usProps.state]) ] = l[usProps.population] * 1);
+    });
+    */
+    glob.slice(1).filter(l => l[globProps.Time] === '2020')
+        .map(l => population[populationCorrections[l[globProps.Location]] || l[globProps.Location]] = l[globProps.PopTotal]*1000);
+
+    //console.log("Population");
+    //Object.getOwnPropertyNames(population).map( p => console.log(`${p}: ${population[p]}`));
+    return population;
+    function fixUSState(state) {
+        return state.substr(1)
+            .replace(/^ /, '')
+            .replace(/^\./, '')
+    }
+    function fixUSNames(county, state) {
+        return county.substr(1)
+            .replace(/ County/i, '')
+            .replace(/^ /, '')
+            .replace(/^\./, '')
+            .replace(/ City and Borough/i, '')
+            .replace(/Doña/, "Dona")
+            .replace( / Borough/i, '')
+            .replace( / City/i, '')
+            .replace(/ Census Area/i, '')
+            .replace( / Municipality/i, '')
+            .replace(/ Parish/i, '') + "," + state;
+    }
+}
+function getProps(headerLine) {
+    let props = {};
+    headerLine.map( (p, i) => props[p] = i)
+    return props;
+}
+let sumsProvinces;
+let countriesWithTotals = {};
+
+function addSumsUS(csv) {
+
+    const props = getProps(csv.usCases[0]);
+
+    sumsProvinces = {};
+    countriesWithTotals = {};
+    csv.usCases.slice(1).map(line => sumStates(line, props, true));
+    csv.usCases = csv.usCases.concat(totalsFromStates());
+
+    sumsProvinces = {};
+    countriesWithTotals = {};
+    csv.usDeaths.slice(1).map(line => sumStates(line, props, false));
+    csv.usDeaths = csv.usDeaths.concat(totalsFromStates());
+}
+function addSumsGlob (csv) {
+    const props = getProps(csv.globCases[0]);
+
+    sumsProvinces = {};
+    countriesWithTotals = {};
+    csv.globCases.slice(1).map(line => sumProvinces(line, props));
+    csv.globCases.slice(1).map(line => sumWorld(line, props));
+    csv.globCases = csv.globCases.concat(totalsFromProvinces());
+
+    sumsProvinces = {};
+    countriesWithTotals = {};
+    csv.globDeaths.slice(1).map(line => sumProvinces(line, props));
+    csv.globDeaths.slice(1).map(line => sumWorld(line, props));
+    csv.globDeaths = csv.globDeaths.concat(totalsFromProvinces());
+}
+const theWorld = 'Total';
+function sumStates (line, props, isCases) {
+    if (!line[props['Admin2']]) {
+        countriesWithTotals[line[props['Admin2']]] = true;
+        return line;
+    }
+
+    const dataProp = isCases ? 11 : 12;
+    const newLine = line.slice(0, props.Combined_Key).concat([line[props['Province_State']] + ', US'])
+    if (!isCases)
+        newLine.push(0)
+    newLine[props['Admin2']] = '';
+
+
+    sumsProvinces[line[props['Province_State']]] = sumsProvinces[line[props['Province_State']]] || {
+        series: [], line: newLine,
+    }
+    const sum = sumsProvinces[line[props['Province_State']]];
+    const series = line.slice(dataProp, line.length).map(point=>point * 1);
+    series.map((point, ix) => sum.series[ix] = (sum.series[ix] || 0) + point * 1) ;
+    if (!isCases)
+        sum.line[dataProp - 1] += line[dataProp - 1] * 1;
+    return line;
+}
+function totalsFromStates () {
+    let additionalLines = [];
+    Object.getOwnPropertyNames(sumsProvinces).map(province => {
+        const sum = sumsProvinces[province];
+        if (!countriesWithTotals[province])
+            additionalLines.push(sum.line.slice(0, sum.dataProp).concat(sum.series))
+        if (!countriesWithTotals[province])
+            console.log("---> " + sum.line.slice(0, sum.dataProp).concat(sum.series).join(","));
+    });
+    return additionalLines;
+}
+function sumProvinces (line, props) {
+    if (!line[props['Province/State']]) {
+        countriesWithTotals[line[props['Country/Region']]] = true;
+        return line;
+    }
+    sumsProvinces[line[props['Country/Region']]] = sumsProvinces[line[props['Country/Region']]] || {
+        series: [], line: line,
+    }
+    const sum = sumsProvinces[line[props['Country/Region']]];
+    const series = line.slice(4, line.length).map(point=>point * 1);
+    series.map((point, ix) => sum.series[ix] = (sum.series[ix] || 0) + point * 1) ;
+
+    return line;
+}
+function totalsFromProvinces () {
+    let additionalLines = [];
+    Object.getOwnPropertyNames(sumsProvinces).map(province => {
+        const sum = sumsProvinces[province];
+        if (!countriesWithTotals[province])
+            additionalLines.push(['', sum.line[1], sum.line[2], sum.line[3]].concat(sum.series))
+    });
+    return additionalLines;
+}
+function sumWorld (line, props) {
+    if (line[props['Province/State']])
+        return line;
+    sumsProvinces[theWorld] = sumsProvinces[theWorld] || {
+        series: [], line: ['', theWorld, 0, 0],
+    }
+    const sum = sumsProvinces[theWorld];
+    const series = line.slice(4, line.length).map(point=>point * 1);
+    series.map((point, ix) => sum.series[ix] = (sum.series[ix] || 0) + point * 1);
+    //console.log(line[props['Country/Region']] + ":" + series[series.length - 1] + " " + sum.series[sum.series.length - 1]);
+    return line;
+}
