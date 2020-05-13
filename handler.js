@@ -5,7 +5,7 @@ const AWS = require('aws-sdk');
 const processData = require('./consolidate');
 const {gzip} = require('node-gzip');
 const population = require('population')
-const bucket = 'website-jalrrb';
+const buckets = ['website-jalrrb', 'website-1l4vj5'];
 const jsuPath = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/";
 
 const csv = {
@@ -26,20 +26,29 @@ module.exports.processCSV = async (event,context,callback) => {
         const [cases, pop, dates] = await processData(csv, population);
         const data = JSON.stringify({dates: dates, data: cases});
           await writeFile(data , "jhu.js", "application/javascript");
-        return "OK"
+        return {
+            statusCode: 200,
+            body: "OK"
+        }
     } catch (e) {
-        return e.toString();
+        return {
+            statusCode: 500,
+            body: "Processing Error" + e.toString() + e.stack
+        }
     }
     async function writeFile(data, key, type) {
         const s3 = new AWS.S3();
-        const destparams = {
-            Bucket: bucket,
-            Key: key,
-            Expires: new Date(new Date().getTime() + 1 * 60 * 1000),
-            Body: (new Date()).toString() + "\n" + data,
-            ContentType: type
-        };
-        await s3.putObject(destparams).promise();
+        for (let ix = 0; ix < buckets.length; ++ix) {
+            const bucket = buckets[ix];
+            const destparams = {
+                Bucket: bucket,
+                Key: key,
+                Expires: new Date(new Date().getTime() + 1 * 60 * 1000),
+                Body: (new Date()).toString() + "\n" + data,
+                ContentType: type
+            };
+            await s3.putObject(destparams).promise();
+        }
     }
 }
 

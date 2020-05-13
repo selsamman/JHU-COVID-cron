@@ -30,7 +30,7 @@ function processCSV(csv) {
         csv[f] = csv[f].split("\n").map(line =>
             line.replace(/;/g,'')
                 .replace(/\"(.*)\"/g,(s)=>
-                    s.replace(/,/g, '~'))
+                    s.replace(/,/g, '~').replace(/"/g, ""))
                 .replace(/,/g,";")
                 .replace(/~/g, ',')
                 .split(";")
@@ -48,19 +48,24 @@ function getUSCases(file, location, prop, populationData, isCases) {
             const state = line[props['Province_State']]
             const key = county ? county + ", " + state : state;
             const dataProp = isCases ? 11 : 12;
-            location [key] = {
-                name: key,
-                code: 'US',
-                type: key.match(/,/) ? "county" : "state",
-                longitude: line[props.Long_],
-                latitude: line[props.Lat],
-                population: location[key] ? location [key].population : 0,
-                cases: location[key] ? location [key].cases : [],
-                deaths: location[key] ? location [key].deaths : [],
+            if (!key.match(/^Out of/i) && !key.match(/^Unassigned/i)) {
+                location [key] = {
+                    name: key,
+                    code: 'US',
+                    type: key.match(/,/) ? "county" : "state",
+                    longitude: line[props.Long_],
+                    latitude: line[props.Lat],
+                    population: location[key] ? location [key].population : 0,
+                    cases: location[key] ? location [key].cases : [],
+                    deaths: location[key] ? location [key].deaths : [],
+                }
+                location [key][prop] = line.slice(dataProp, line.length)
+                if (!isCases) {
+                    location[key]['population'] = line[dataProp - 1];
+                    if (line[dataProp - 1]*1 === 0)
+                        delete location[key];
+                }
             }
-            location [key][prop] = line.slice(dataProp, line.length)
-            if (!isCases)
-                location[key]['population'] = line[dataProp - 1];
         }
     });
     return [location, dates];
@@ -69,11 +74,13 @@ const countryCorrections = {
     "Cote d'Ivoire": "Côte d'Ivoire",
     "\"Korea": "South Korea",
     "Korea": "South Korea",
+    "Korea, South": "South Korea",
     "US": "United States",
     "Taiwan*": "Taiwan",
     "Brunei" : "Brunei Darussalam",
     "Vietnam" : "Viet Nam",
-    "Korea South": "South Korea"
+    "Korea South": "South Korea",
+    "Georgia" : "Georgia (Sakartvelo)"
 }
 const populationCorrections = {
     "Taiwan Province of China" : "Taiwan",
@@ -88,7 +95,7 @@ const populationCorrections = {
     "Venezuela (Bolivarian Republic of)": "Venezuela",
     "Syrian Arab Republic": "Syria",
     "Lao People's Democratic Republic": "Laos",
-
+    "Georgia" : "Georgia (Sakartvelo)"
 
 }
 function getCountryCodes() {
@@ -118,6 +125,7 @@ function getGlobCases(file, location, prop, populationData, cc) {
                 if (key === "United Kingdom") {
                     key = province;
                     type = "country";
+                    countryCode = cc[key]
                 } else {
                     key = province.match(key) ? province : province + ", " + key;
                     type = "province";
@@ -132,6 +140,8 @@ function getGlobCases(file, location, prop, populationData, cc) {
             } else {
                 if (!countryCode)
                     console.log("Missing country code for " + key);
+                if (location[key] && location[key].type !== type)
+                    console.log("Duplicate Country " + key);
                 location [key] = {
                     name: key,
                     code: countryCode || "N/A",
@@ -188,20 +198,10 @@ function getPopulation(us, glob) {
 
     };
     let states = {}
-    /*
-    us.slice(5, us.length-6).map(l => {
-if (l[usProps.county].match(/Queens/))
-    console.log("Queens " + l);
-        population[fixUSState(l[usProps.state])] = (population[fixUSState(l[usProps.state])] || 0) + l[usProps.population] * 1;
-        return (population[ fixUSNames(l[usProps.county], l[usProps.state]) ] = l[usProps.population] * 1);
-    });
-    */
     glob.slice(1).filter(l => l[globProps.Time] === '2020')
         .map(l => population[populationCorrections[l[globProps.Location]] || l[globProps.Location]] = l[globProps.PopTotal]*1000);
-
-    //console.log("Population");
-    //Object.getOwnPropertyNames(population).map( p => console.log(`${p}: ${population[p]}`));
     return population;
+
     function fixUSState(state) {
         return state.substr(1)
             .replace(/^ /, '')
@@ -288,8 +288,6 @@ function totalsFromStates () {
         const sum = sumsProvinces[province];
         if (!countriesWithTotals[province])
             additionalLines.push(sum.line.slice(0, sum.dataProp).concat(sum.series))
-        if (!countriesWithTotals[province])
-            console.log("---> " + sum.line.slice(0, sum.dataProp).concat(sum.series).join(","));
     });
     return additionalLines;
 }

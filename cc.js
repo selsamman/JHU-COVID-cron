@@ -247,7 +247,7 @@ module.exports.cc = [
     "name": "Korea (Democratic People's Republic of)",
     "alpha-2": "KP",
     "country-code": "408"
-}, {"name": "Korea, Republic of", "alpha-2": "KR", "country-code": "410"}, {
+}, {"name": "South Korea", "alpha-2": "KR", "country-code": "410"}, {
     "name": "Kuwait",
     "alpha-2": "KW",
     "country-code": "414"
@@ -503,7 +503,7 @@ module.exports.cc = [
     "name": "Viet Nam",
     "alpha-2": "VN",
     "country-code": "704"
-}, {"name": "Virgin Islands (British)", "alpha-2": "VG", "country-code": "092"}, {
+}, {"name": "British Virgin Islands", "alpha-2": "VG", "country-code": "092"}, {
     "name": "Virgin Islands (U.S.)",
     "alpha-2": "VI",
     "country-code": "850"
