@@ -20,6 +20,8 @@ async function doIt () {
     console.log(JSON.stringify(cases["California"]));
     console.log(JSON.stringify(cases["United States"]));
     console.log(JSON.stringify(cases["United Kingdom"]));
+    console.log(JSON.stringify(cases["Germany"]));
+    console.log(JSON.stringify(cases["France"]));
     console.log(JSON.stringify(cases["Dutchess, New York"]));
     console.log(JSON.stringify(cases).length);
     console.log(Object.getOwnPropertyNames(cases).filter(c=>cases[c].type==="country").length + " countries");
@@ -28,6 +30,8 @@ async function doIt () {
     console.log(Object.getOwnPropertyNames(cases).filter(c=>cases[c].population==="0").length + " zero populations");
     console.log("as of " + asof)
     await fs.writeFile("population.js", "module.exports = \n" + JSON.stringify(population, null, 2));
+    const data = JSON.stringify({dates: asof, data: cases});
+    await fs.writeFile("jhu.js", (new Date()).toString() + "\n" + data);
 }
 async function readFiles() {
     return {
@@ -35,6 +39,8 @@ async function readFiles() {
         globDeaths: (await fs.readFile("./testdata/global_deaths.csv", "utf8")),
         usCases: (await fs.readFile("./testdata/us_cases.csv", "utf8")),
         usDeaths: (await fs.readFile("./testdata/us_deaths.csv", "utf8")),
+        globTests: (await fs.readFile("./testdata/global_tests.csv", "utf8")),
+        usTests: (await fs.readFile("./testdata/us_tests.csv", "utf8")),
         usPop: (await fs.readFile("./srcdata/co-est2019-annres.csv", "utf8")),
         globPop: (await fs.readFile("./srcdata/WPP2019_TotalPopulationBySex.csv", "utf8")),
     }

@@ -7,18 +7,18 @@ const {gzip} = require('node-gzip');
 const population = require('population')
 const buckets = ['website-jalrrb', 'website-1l4vj5'];
 const jsuPath = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/";
-
 const csv = {
-    globCases: ["time_series_covid19_confirmed_global.csv", "cases.csv"],
-    globDeaths: ["time_series_covid19_deaths_global.csv", "deaths.csv"],
-    usCases: ["time_series_covid19_confirmed_US.csv", "cases_US.csv"],
-    usDeaths: ["time_series_covid19_deaths_US.csv", "deaths_US.csv"],
-}
+    globCases: [`${jsuPath}time_series_covid19_confirmed_global.csv`, "cases.csv"],
+    globDeaths: [`${jsuPath}time_series_covid19_deaths_global.csv`, "deaths.csv"],
+    usCases: [`${jsuPath}time_series_covid19_confirmed_US.csv`, "cases_US.csv"],
+    usDeaths: [`${jsuPath}time_series_covid19_deaths_US.csv`, "deaths_US.csv"],
+    usTests: [`https://covidtracking.com/api/v1/states/daily.csv`, "tests_US.csv"],
+    globTests: [`https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/testing/covid-testing-all-observations.csv`, "tests.csv"],}
 
 module.exports.processCSV = async (event,context,callback) => {
     try {
         for (let prop in csv) {
-            const data = await get(jsuPath + csv[prop][0]);
+            const data = await get(csv[prop][0]);
             await writeFile(data, csv[prop][1], );
             csv[prop] = data;
         }

@@ -59,7 +59,7 @@ module.exports.stateAbbreviations = {
     "WI": "Wisconsin",
     "WY": "Wyoming"
 }
-export const stateNames = {
+module.exports.stateNames = {
     'Alabama': 'AL',
     'Alaska': 'AK',
     'American Samoa': 'AS',
