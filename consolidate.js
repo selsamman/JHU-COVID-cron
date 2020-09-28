@@ -34,6 +34,7 @@ function processCSV(csv, dateRange) {
 
         csv[f] = csv[f].split("\n").map(line =>
             line.replace(/;/g,'')
+                .replace(/\r/,'')
                 .replace(/\"(.*)\"/g,(s)=>
                     s.replace(/,/g, '~').replace(/"/g, ""))
                 .replace(/,/g,";")
@@ -56,14 +57,22 @@ function getGlobTests(file, location,dr) {
         const date = new Date(line[props['Date']]).getTime();
         const Entity = line[props['Entity']];
         const type = Entity.split(" - ")[1];
-        const count = line[props['Cumulative total']] * 1;
+        const cumulative = line[props['Cumulative total']] * 1;
+        const daily = line[props['Daily change in cumulative total']] * 1;
         if (!countryData[country])
-            countryData[country] = {};
-        if (!countryData[country][type])
-            countryData[country][type] = new Array(days).fill(0);
+            countryData[country] = new Array(days).fill(0);
         if (date < fromDate || date > toDate)
             return;
-        countryData[country][type][Math.round((date - fromDate) / dayMS)] = count;
+        countryData[country][Math.round((date - fromDate) / dayMS)] =
+            countryData[country][Math.round((date - fromDate) / dayMS)] || {};
+        const data = countryData[country][Math.round((date - fromDate) / dayMS)];
+        const previousData = countryData[country][Math.round((date - fromDate) / dayMS) - 1];
+        if (cumulative > 0)
+            data[type] = cumulative
+        else if (daily > 0)
+            data[type] = (previousData ? previousData[type] : 0) + daily
+        else
+            data[type] = (previousData ? previousData[type] : 0);
     });
     for (let country in location) {
         const locationData = location[country];
@@ -75,12 +84,14 @@ function getGlobTests(file, location,dr) {
             continue;
         }
         locationData.tests = new Array(days).fill(0);
-        for (var group in testData) {
-            for (let ix = 0; ix < testData[group].length; ++ix) {
-                if (testData[group][ix] === 0 && ix > 0 && testData[group][ix - 1] > 0)
-                    testData[group][ix] = testData[group][ix - 1]
-                locationData.tests[ix] += testData[group][ix]
-            }
+        let total = 0;
+        for (let ix = 0; ix < locationData.tests.length; ++ix) {
+            if (testData[ix]) {
+                total = 0;
+                for (let type in testData[ix])
+                    total = Math.max(total, testData[ix][type])
+                }
+            locationData.tests[ix] = total;
         }
     };
 }
