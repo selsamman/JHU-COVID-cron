@@ -24,7 +24,7 @@ module.exports.processCSV = async (event,context,callback) => {
         }
 
         const [cases, pop, dates] = await processData(csv, population);
-        const data = JSON.stringify({dates: dates, data: cases});
+        const data = JSON.stringify({dates: dates, data: cases}).replace(/"([0-9]+)",/g, "$1,");
           await writeFile(data , "jhu.js", "application/javascript");
         return {
             statusCode: 200,
