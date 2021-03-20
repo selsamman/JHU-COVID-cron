@@ -20,9 +20,11 @@ async function doIt () {
     console.log(JSON.stringify(cases["California"]));
     console.log(JSON.stringify(cases["United States"]));
     console.log(JSON.stringify(cases["United Kingdom"]));
+    console.log(JSON.stringify(cases["Ireland"]));
     console.log(JSON.stringify(cases["Germany"]));
     console.log(JSON.stringify(cases["France"]));
     console.log(JSON.stringify(cases["Dutchess, New York"]));
+    console.log(JSON.stringify(cases["Cayman Islands"]));
     console.log(JSON.stringify(cases).length);
     console.log(Object.getOwnPropertyNames(cases).filter(c=>cases[c].type==="country").length + " countries");
     console.log(Object.getOwnPropertyNames(cases).filter(c=>cases[c].type==="state").length + " states");
@@ -43,5 +45,7 @@ async function readFiles() {
         usTests: (await fs.readFile("./testdata/us_tests.csv", "utf8")),
         usPop: (await fs.readFile("./srcdata/co-est2019-annres.csv", "utf8")),
         globPop: (await fs.readFile("./srcdata/WPP2019_TotalPopulationBySex.csv", "utf8")),
+        vaccinations: (await fs.readFile("./testdata/vaccinations.csv", "utf8")),
+        usVaccinations: (await fs.readFile("./testdata/vaccinations_us.csv", "utf8"))
     }
 }

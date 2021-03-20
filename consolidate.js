@@ -14,7 +14,8 @@ module.exports = async function processData (csv, population) {
     addSumsGlob(csv);
     let [c3, dr3] = getGlobCases(csv.globCases, cases, "cases", population, cc);
     let [c4, dr4] = getGlobCases(csv.globDeaths, cases, "deaths", population, cc);
-
+    getVaccinations(csv.vaccinations, cases, dr1);
+    getUsVaccinations(csv.usVaccinations, cases, dr1)
     getGlobTests(csv.globTests, cases, dr1);
     getUSTests(csv.usTests, cases, dr1);
 
@@ -25,9 +26,27 @@ module.exports = async function processData (csv, population) {
         console.log(dr4);
         throw ("inconsistent data ranges");
     }
-    return [cases, population, dr1];
+    return [shrink(cases), population, dr1];
 }
-
+function shrink(cases) {
+    for (const c in cases)
+        for (const p in cases[c])
+            if (cases[c][p] instanceof Array)
+                cases[c][p] = compress(cases[c][p]);
+    return cases;
+    function compress (a) {
+        const nr = [];
+        let nz = false;
+        a.map(v => {
+            v = v * 1;
+            if (v > 0)
+                nz = true;
+            if (nz)
+                nr.push(v);
+        })
+        return nr;
+    }
+}
 function processCSV(csv, dateRange) {
     console.log("File Lengths");
     Object.getOwnPropertyNames(csv).map( f => {
@@ -43,6 +62,92 @@ function processCSV(csv, dateRange) {
         );
     });
     return csv;
+}
+function getUsVaccinations(file, location, dr) {
+    const dayMS = 1000 * 60 * 60 * 24;
+    const props=getProps(file[0]);
+    const countryData = {}
+    const toDate = new Date(dr[dr.length - 1]).getTime();
+    const fromDate = new Date(dr[0]).getTime();
+    const days = Math.round((toDate - fromDate) / dayMS) + 1;
+    let currentCountry = null;
+    file.slice(1).map(line => {
+
+        const country = (line[props['location']] + "").replace(/ State/, '');
+        currentCountry = country;
+        const date = new Date(line[props['date']]).getTime();
+        const vaccinated = line[props['people_vaccinated']]*1;
+        if (!countryData[country])
+            countryData[country] = new Array(days).fill(0);
+        if (date < fromDate || date > toDate)
+            return;
+        countryData[country][Math.round((date - fromDate) / dayMS)] = vaccinated;
+    });
+    for (let country in location) {
+        const locationData = location[country];
+        if (locationData.type !== 'state')
+            continue;
+        const vaccinations = countryData[locationData.name];
+        if (vaccinations)
+            locationData.vaccinations = fillout(vaccinations);
+        else
+            locationData.vaccinations = new Array(days).fill(0);
+    }
+}
+function fillout(arr) {
+    let last = 0;
+    last = 0;
+    lastActual = 0;
+    let increment = 0;
+    arr.map((count, ix) => {
+        if (count) {
+            increment = 0;
+            lastActual = count;
+            last = count;
+        } else {
+            if(!increment)
+                arr.slice(ix).findIndex((c, ix) => {
+                    if (c > 0)
+                        increment = Math.floor((c - lastActual) / (ix + 1));
+                    return c
+                })
+        }
+        arr[ix] = count || (lastActual ? (last + increment) : count);
+        last = last + increment;
+    })
+    return arr;
+}
+function getVaccinations(file, location, dr) {
+    const dayMS = 1000 * 60 * 60 * 24;
+    const props=getProps(file[0]);
+    const countryData = {}
+    const toDate = new Date(dr[dr.length - 1]).getTime();
+    const fromDate = new Date(dr[0]).getTime();
+    const days = Math.round((toDate - fromDate) / dayMS) + 1;
+    let currentCountry = null;
+    file.slice(1).map(line => {
+
+        const country = line[props['iso_code']];
+        currentCountry = country;
+        const date = new Date(line[props['date']]).getTime();
+        const vaccinated = line[props['people_vaccinated']]*1;
+        if (!countryData[country])
+            countryData[country] = new Array(days).fill(0);
+        if (date < fromDate || date > toDate)
+            return;
+        countryData[country][Math.round((date - fromDate) / dayMS)] = vaccinated;
+    });
+    for (let country in location) {
+        const locationData = location[country];
+        if (locationData.type !== 'country' && locationData.type !== 'N/A')
+            continue;
+        const vaccinations = countryData[country === 'Total' ? 'OWID_WRL' : cc.cc[locationData.code]];
+        if (vaccinations) {
+            const f = fillout(vaccinations);
+            locationData.vaccinations = fillout(vaccinations);
+        } else
+            locationData.vaccinations = new Array(days).fill(0);
+    }
 }
 function getGlobTests(file, location,dr) {
     const dayMS = 1000 * 60 * 60 * 24;
@@ -181,7 +286,9 @@ const countryCorrections = {
     "Brunei" : "Brunei Darussalam",
     "Vietnam" : "Viet Nam",
     "Korea South": "South Korea",
-    "Georgia" : "Georgia (Sakartvelo)"
+    "Georgia" : "Georgia (Sakartvelo)",
+    "Falkland Islands (Malvinas)": "Falkland Islands",
+    "Turks and Caicos Islands": "Turks and Caicos"
 }
 const populationCorrections = {
     "Taiwan Province of China" : "Taiwan",
@@ -221,12 +328,10 @@ function getGlobCases(file, location, prop, populationData, cc) {
         if (province)
             if (populationData[province]) {
                 population = populationData[province];
-
-
                 if (key === "United Kingdom") {
-                    key = province;
+                    countryCode = cc[province]
+                    key = countryCorrections[province] || province;
                     type = "country";
-                    countryCode = cc[key]
                 } else {
                     key = province.match(key) ? province : province + ", " + key;
                     type = "province";
