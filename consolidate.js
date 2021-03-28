@@ -17,7 +17,8 @@ module.exports = async function processData (csv, population) {
     getVaccinations(csv.vaccinations, cases, dr1);
     getUsVaccinations(csv.usVaccinations, cases, dr1)
     getGlobTests(csv.globTests, cases, dr1);
-    getUSTests(csv.usTests, cases, dr1);
+    //getUSTests(csv.usTests, cases, dr1);
+    getUSTestsCDC(csv.usTestsCDC, cases, dr1);
 
     if (dr1.toString() !== dr2.toString() || dr1.toString() !== dr3.toString() || dr1.toString() !== dr4.toString()) {
         console.log(dr1);
@@ -54,7 +55,7 @@ function processCSV(csv, dateRange) {
         csv[f] = csv[f].split("\n").map(line =>
             line.replace(/;/g,'')
                 .replace(/\r/,'')
-                .replace(/\"(.*)\"/g,(s)=>
+                .replace(/\"(.*?)\"/g,(s)=>
                     s.replace(/,/g, '~').replace(/"/g, ""))
                 .replace(/,/g,";")
                 .replace(/~/g, ',')
@@ -200,6 +201,51 @@ function getGlobTests(file, location,dr) {
         }
     };
 }
+function getUSTestsCDC(file, location,dr) {
+    const dayMS = 1000 * 60 * 60 * 24;
+    const props=getProps(file[0]);
+    const countryData = {}
+    const toDate = new Date(dr[dr.length - 1]).getTime();
+    const fromDate = new Date(dr[0]).getTime();
+    const days = Math.round((toDate - fromDate) / dayMS) + 1;
+
+    file.slice(1).map(line => {
+        const country = st.stateAbbreviations[line[0]];
+        const date = new Date(line[props['date']]).getTime();
+        const count = (line[props['total_results_reported']] + "").replace(/,/g, '') * 1;
+        if (!countryData[country])
+            countryData[country] = new Array(days).fill(0);
+        if (date < fromDate || date > toDate)
+            return;
+        countryData[country][Math.round((date - fromDate) / dayMS)] += count;
+    });
+    for (let country in location) {
+        const locationData = location[country];
+        if (locationData.type !== 'state')
+            continue;
+        let testData = countryData[country];
+        if (!testData) {
+            console.log(`No test data for ${country}`)
+            continue;
+        }
+        locationData.tests = testData;
+        for (let ix = 0; ix < locationData.tests.length; ++ix)
+            if (locationData.tests[ix] === 0 && ix > 0 && locationData.tests[ix - 1] > 0)
+                locationData.tests[ix] = locationData.tests[ix - 1]
+
+    };
+    let usTests = new Array(days).fill(0);
+    const countryDataArray = Object.keys(countryData).map(k => countryData[k]);
+    location["United States"].tests = usTests.map((v, ix) => countryDataArray.reduce((a, v) => {
+        return a + v[ix]*1
+    }, 0));
+    console.log(location["United States"].tests.length);
+    function fixDate(date) {
+        date = date + "";
+        return date[4]+date[5]+"/"+date[6]+date[7]+"/"+date[0]+date[1]+date[2]+date[3];
+    }
+}
+
 function getUSTests(file, location,dr) {
     const dayMS = 1000 * 60 * 60 * 24;
     const props=getProps(file[0]);

@@ -43,6 +43,7 @@ async function readFiles() {
         usDeaths: (await fs.readFile("./testdata/us_deaths.csv", "utf8")),
         globTests: (await fs.readFile("./testdata/global_tests.csv", "utf8")),
         usTests: (await fs.readFile("./testdata/us_tests.csv", "utf8")),
+        usTestsCDC: (await fs.readFile("./testdata/us_tests.csv", "utf8")),
         usPop: (await fs.readFile("./srcdata/co-est2019-annres.csv", "utf8")),
         globPop: (await fs.readFile("./srcdata/WPP2019_TotalPopulationBySex.csv", "utf8")),
         vaccinations: (await fs.readFile("./testdata/vaccinations.csv", "utf8")),
