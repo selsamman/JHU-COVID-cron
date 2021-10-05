@@ -32,8 +32,14 @@ async function doIt () {
     console.log(Object.getOwnPropertyNames(cases).filter(c=>cases[c].population==="0").length + " zero populations");
     console.log("as of " + asof)
     await fs.writeFile("population.js", "module.exports = \n" + JSON.stringify(population, null, 2));
-    const data = JSON.stringify({dates: asof, data: cases}).replace(/"([0-9]+)",/g, "$1,");
-    await fs.writeFile("jhu.js", (new Date()).toString() + "\n" + data);
+    let data = JSON.stringify({dates: asof, data: cases}).replace(/"([0-9]+)",/g, "$1,");
+    const segments = []
+    while (data.length > 0) {
+        segments.push(data.substr(0, 9000000))
+        data = data.substr(9000000);
+    }
+    for (let ix = 1; ix <= segments.length; ++ix)
+        await fs.writeFile(`jhu${ix}.js`, `${(new Date()).toString()} ${ix} of ${segments.length}\n` + segments[ix - 1]);
 }
 async function readFiles() {
     return {

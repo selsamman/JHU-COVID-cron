@@ -29,8 +29,14 @@ module.exports.processCSV = async (event,context,callback) => {
         }
 
         const [cases, pop, dates] = await processData(csv, population);
-        const data = JSON.stringify({dates: dates, data: cases});
-          await writeFile(data , "jhu.js", "application/javascript");
+        let data = JSON.stringify({dates: dates, data: cases});
+        const segments = []
+        while (data.length > 0) {
+            segments.push(data.substr(0, 9000000))
+            data = data.substr(9000000);
+        }
+        for (let ix = 1; ix <= segments.length; ++ix)
+            await writeFile(segments[ix - 1] , `jhu${ix}.js`, ix, segments.length, "application/javascript");
         return {
             statusCode: 200,
             body: "OK"
@@ -41,7 +47,8 @@ module.exports.processCSV = async (event,context,callback) => {
             body: "Processing Error" + e.toString() + e.stack
         }
     }
-    async function writeFile(data, key, type) {
+    async function writeFile(data, key, x, y, type) {
+        console.log(`Writing ${key} ${x} of ${y} length: ${data.length}`);
         const s3 = new AWS.S3();
         for (let ix = 0; ix < buckets.length; ++ix) {
             const bucket = buckets[ix];
@@ -49,7 +56,7 @@ module.exports.processCSV = async (event,context,callback) => {
                 Bucket: bucket,
                 Key: key,
                 Expires: new Date(new Date().getTime() + 1 * 60 * 1000),
-                Body: (new Date()).toString() + "\n" + data,
+                Body: `${(new Date()).toString()} ${x} of ${y}\n` + data,
                 ContentType: type
             };
             await s3.putObject(destparams).promise();
